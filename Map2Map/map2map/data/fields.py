@@ -8,7 +8,7 @@ from torch.utils.data import Dataset
 
 from ..utils import import_attr
 from . import norms
-
+from .norms.cosmology import D
 
 class FieldDataset(Dataset):
     """Dataset of lists of fields.
@@ -43,28 +43,34 @@ class FieldDataset(Dataset):
     the input for super-resolution, in which case `crop` and `pad` are sizes of
     the input resolution.
     """
-    def __init__(self, in_patterns, tgt_patterns,
+    def __init__(self, style_pattern, in_patterns, tgt_patterns,
                  in_norms=None, tgt_norms=None, callback_at=None,
                  augment=False, aug_shift=None, aug_add=None, aug_mul=None,
                  crop=None, crop_start=None, crop_stop=None, crop_step=None,
                  in_pad=0, tgt_pad=0, scale_factor=1,
                  **kwargs):
+        
+        self.style_files = sorted(glob(style_pattern))
+
         in_file_lists = [sorted(glob(p)) for p in in_patterns]
         self.in_files = list(zip(* in_file_lists))
 
         tgt_file_lists = [sorted(glob(p)) for p in tgt_patterns]
         self.tgt_files = list(zip(* tgt_file_lists))
 
-        if len(self.in_files) != len(self.tgt_files):
-            raise ValueError('number of input and target fields do not match')
+        if len(self.style_files) != len(self.in_files) != len(self.tgt_files):
+            raise ValueError('number of style, input, and target files do not match')
         self.nfile = len(self.in_files)
 
         if self.nfile == 0:
             raise FileNotFoundError('file not found for {}'.format(in_patterns))
         self.is_read_once = np.full(self.nfile, False)
 
+        self.style_col = [0, 5]  # HACK, taking Omega_m and z
+        self.style_size = np.load(self.style_files[0])[self.style_col].shape[0]
         self.in_chan = [np.load(f, mmap_mode='r').shape[0]
                         for f in self.in_files[0]]
+
         self.tgt_chan = [np.load(f, mmap_mode='r').shape[0]
                          for f in self.tgt_files[0]]
 
@@ -146,11 +152,12 @@ class FieldDataset(Dataset):
             for files in self.in_files[:2] + self.tgt_files[:2]
             for file in files
         )
-
+       
     def __len__(self):
         return self.nsample
 
     def __getitem__(self, idx):
+
         ifile, icrop = divmod(idx, self.ncrop)
 
         # use memmap after reading a file once
@@ -160,6 +167,10 @@ class FieldDataset(Dataset):
             mmap_mode = None
             self.is_read_once[ifile] = True
 
+        ### DSJ Hack to get redshift
+        Om, redshift = np.load(self.style_files[ifile])[self.style_col]
+        Dz = D(redshift, Om=Om)
+        
         in_fields = [np.load(f, mmap_mode=mmap_mode)
                      for f in self.in_files[ifile]]
         tgt_fields = [np.load(f, mmap_mode=mmap_mode)
@@ -195,13 +206,17 @@ class FieldDataset(Dataset):
                       for f in tgt_fields]
 
         if self.in_norms is not None:
-            for norm, x in zip(self.in_norms, in_fields):
-                norm = import_attr(norm, norms, callback_at=self.callback_at)
+            for norm_name, x in zip(self.in_norms, in_fields):
+                norm = import_attr(norm_name, norms, callback_at=self.callback_at)
                 norm(x, **self.kwargs)
+
         if self.tgt_norms is not None:
-            for norm, x in zip(self.tgt_norms, tgt_fields):
-                norm = import_attr(norm, norms, callback_at=self.callback_at)
-                norm(x, **self.kwargs)
+            for norm_name, x in zip(self.tgt_norms, tgt_fields):
+                norm = import_attr(norm_name, norms, callback_at=self.callback_at)
+                if (norm_name == 'cosmology.vel') :
+                    norm(x, Om=Om, z=redshift, **self.kwargs)
+                else :
+                    norm(x, **self.kwargs)
 
         if self.augment:
             flip_axes = flip(in_fields, None, self.ndim)
@@ -221,16 +236,19 @@ class FieldDataset(Dataset):
         in_fields = torch.cat(in_fields, dim=0)
         tgt_fields = torch.cat(tgt_fields, dim=0)
 
-        #in_relpath = [os.path.relpath(file, start=self.commonpath)
-        #              for file in self.in_files[ifile]]
         tgt_relpath = [os.path.relpath(file, start=self.commonpath)
                        for file in self.tgt_files[ifile]]
+
+        Om = torch.tensor(Om).float()
+        Dz = torch.tensor(Dz).float()
 
         return {
             'input': in_fields,
             'target': tgt_fields,
-            #'input_relpath': in_relpath,
             'target_relpath': tgt_relpath,
+            'Om': Om,
+            'redshift': redshift,
+            'Dz': Dz
         }
 
     def assemble(self, label, chan, patches, paths):

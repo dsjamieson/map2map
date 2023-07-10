@@ -8,8 +8,7 @@ from matplotlib.colors import Normalize, LogNorm, SymLogNorm
 from matplotlib.cm import ScalarMappable
 plt.rc('text', usetex=False)
 
-from ..models import lag2eul, power
-
+from ..models import lag2eul, power, Pk, XPk
 
 def quantize(x):
     return 2 ** round(log2(x), ndigits=1)
@@ -164,4 +163,36 @@ def plt_power(*fields, dis=None, label=None, **kwargs):
 
     fig.tight_layout()
 
+    return fig
+
+def plt_xpower(out, tgt, inp = None, in_norm = None) :
+    """
+    """
+    with torch.no_grad():
+        xpk = XPk(out, tgt)
+        k = xpk.k
+        if inp is not None :
+            if in_norm is not None :
+                inp = inp * in_norm
+            pki = Pk(inp)
+
+    plt.close('all')
+    fig, axs = plt.subplots(3, 1, figsize=(4, 5), dpi=150)
+    axs[0].loglog(k, xpk.p11, label = 'OUT')
+    axs[0].loglog(k, xpk.p22, label = 'TGT', dashes = (5, 5))
+    if inp is not None :
+        axs[0].loglog(k, pki.p, label = 'IN ', dashes = (1.5, 4))
+    axs[1].semilogx(k, xpk.s)
+    axs[2].semilogx(k, xpk.te)
+    axs[0].legend(handlelength = 1.2, fontsize = 14)
+    axs[2].set_xlabel('P(k)', fontsize = 14)
+    axs[0].set_ylabel('k', fontsize = 14)
+    axs[1].set_ylabel('s', fontsize = 14)
+    axs[2].set_ylabel('dT/T', fontsize = 14)
+    axs[0].set_xticklabels([])
+    axs[1].set_xticklabels([])
+    for ax in axs :
+        ax.tick_params(axis='both', labelsize=14)
+    fig.subplots_adjust(hspace = 0.02)
+    fig.tight_layout()
     return fig

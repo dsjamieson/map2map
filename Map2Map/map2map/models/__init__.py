@@ -6,7 +6,7 @@ from .narrow import narrow_by, narrow_cast, narrow_like
 from .resample import resample, Resampler
 
 from .lag2eul import lag2eul
-from .power import power
+from .power import power, Pk, XPk
 
 from .dice import DiceLoss, dice_loss
 

@@ -98,10 +98,14 @@ def add_common_args(parser):
 def add_train_args(parser):
     add_common_args(parser)
 
+    parser.add_argument('--train-style-pattern', type=str, required=True,
+            help='glob pattern for training data styles')
     parser.add_argument('--train-in-patterns', type=str_list, required=True,
             help='comma-sep. list of glob patterns for training input data')
     parser.add_argument('--train-tgt-patterns', type=str_list, required=True,
             help='comma-sep. list of glob patterns for training target data')
+    parser.add_argument('--val-style-pattern', type=str,
+            help='glob pattern for validation data styles')
     parser.add_argument('--val-in-patterns', type=str_list,
             help='comma-sep. list of glob patterns for validation input data')
     parser.add_argument('--val-tgt-patterns', type=str_list,
@@ -120,28 +124,6 @@ def add_train_args(parser):
             help='multiplicative data augmentation, (log-normal) std, '
             'same factor for all fields')
 
-    parser.add_argument('--adv-model', type=str,
-            help='discriminator model, disabled by default')
-    parser.add_argument('--adv-model-spectral-norm', action='store_true',
-            help='enable spectral normalization on the discriminator')
-    parser.add_argument('--adv-criterion', default='BCEWithLogitsLoss', type=str,
-            help='adversarial loss function')
-    parser.add_argument('--adv-r1-reg-interval', default=0, type=int,
-            help='interval (batches) between R1 regularization. '
-            'Disabled if non-positive; '
-            'lazy regularization if greater than 1 (not every batch)')
-    parser.add_argument('--cgan', action='store_true',
-            help='enable conditional GAN')
-    parser.add_argument('--adv-start', default=0, type=int,
-            help='epoch to start adversarial training')
-    parser.add_argument('--adv-label-smoothing', default=1, type=float,
-            help='label of real samples for the discriminator, '
-            'e.g. 0.9 for label smoothing and 1 to disable')
-    parser.add_argument('--instance-noise', default=0, type=float,
-            help='noise added to the adversary inputs to stabilize training')
-    parser.add_argument('--instance-noise-batches', default=1e4, type=float,
-            help='noise annealing duration')
-
     parser.add_argument('--optimizer', default='Adam', type=str,
             help='optimization algorithm')
     parser.add_argument('--lr', type=float, required=True,
@@ -149,10 +131,6 @@ def add_train_args(parser):
     parser.add_argument('--optimizer-args', default='{}', type=json.loads,
             help='optimizer arguments in addition to the learning rate, '
             'e.g. --optimizer-args \'{"betas": [0.5, 0.9]}\'')
-    parser.add_argument('--adv-lr', type=float,
-            help='initial adversary learning rate, default to --lr')
-    parser.add_argument('--adv-optimizer-args', type=json.loads,
-            help='adversary optimizer arguments, default to --optimizer-args')
     parser.add_argument('--reduce-lr-on-plateau', action='store_true',
             help='Enable ReduceLROnPlateau learning rate scheduler')
     parser.add_argument('--scheduler-args', default='{"verbose": true}',
@@ -188,6 +166,8 @@ def add_train_args(parser):
 def add_test_args(parser):
     add_common_args(parser)
 
+    parser.add_argument('--test-style-pattern', type=str, required=True,
+            help='glob pattern for test data styles')
     parser.add_argument('--test-in-patterns', type=str_list, required=True,
             help='comma-sep. list of glob patterns for test input data')
     parser.add_argument('--test-tgt-patterns', type=str_list, required=True,
@@ -220,19 +200,6 @@ def set_train_args(args):
 
     args.val = args.val_in_patterns is not None and \
             args.val_tgt_patterns is not None
-
-    args.adv = args.adv_model is not None
-
-    if args.adv:
-        if args.adv_lr is None:
-            args.adv_lr = args.lr
-        if args.adv_optimizer_args is None:
-            args.adv_optimizer_args = args.optimizer_args
-
-    if args.cgan and not args.adv:
-        args.cgan =False
-        warnings.warn('Disabling cgan given adversary is disabled',
-                      RuntimeWarning)
 
 
 def set_test_args(args):

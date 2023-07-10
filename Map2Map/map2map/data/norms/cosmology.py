@@ -2,16 +2,16 @@ import numpy as np
 from scipy.special import hyp2f1
 
 
-def dis(x, undo=False, z=0.0, dis_std=6.0, **kwargs):
-    dis_norm = dis_std * D(z)  # [Mpc/h]
+def dis(x, undo=False, z=0.0, dis_std=6.0, Om=0.31, **kwargs):
+    dis_norm = dis_std * D(z, Om)  # [Mpc/h]
 
     if not undo:
         dis_norm = 1 / dis_norm
 
     x *= dis_norm
 
-def vel(x, undo=False, z=0.0, dis_std=6.0, **kwargs):
-    vel_norm = dis_std * D(z) * H(z) * f(z) / (1 + z)  # [km/s]
+def vel(x, undo=False, z=0.0, dis_std=6.0, Om=0.31, **kwargs):
+    vel_norm = dis_std * D(z, Om) * H(z, Om) * f(z, Om) / (1 + z)  # [km/s]
 
     if not undo:
         vel_norm = 1 / vel_norm
@@ -19,7 +19,7 @@ def vel(x, undo=False, z=0.0, dis_std=6.0, **kwargs):
     x *= vel_norm
 
 
-def D(z, Om=0.31):
+def D(z, Om=0.31) -> np.float64:
     """linear growth function for flat LambdaCDM, normalized to 1 at redshift zero
     """
     OL = 1 - Om

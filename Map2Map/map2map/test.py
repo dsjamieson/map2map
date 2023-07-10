@@ -5,13 +5,13 @@ from pprint import pprint
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
+from torch.func import jvp
 
 from .data import FieldDataset
 from .data import norms
 from . import models
 from .models import narrow_cast
 from .utils import import_attr, load_model_state_dict
-
 
 def test(args):
     if torch.cuda.is_available():
@@ -35,6 +35,7 @@ def test(args):
     sys.stdout.flush()
 
     test_dataset = FieldDataset(
+        style_pattern=args.test_style_pattern,
         in_patterns=args.test_in_patterns,
         tgt_patterns=args.test_tgt_patterns,
         in_norms=args.in_norms,
@@ -61,10 +62,13 @@ def test(args):
         pin_memory=True,
     )
 
-    in_chan, out_chan = test_dataset.in_chan, test_dataset.tgt_chan
+    style_size = test_dataset.style_size
+    in_chan = test_dataset.in_chan
+    out_chan = test_dataset.tgt_chan[:1]
+    write_chan = (out_chan[0],) * 2
 
     model = import_attr(args.model, models, callback_at=args.callback_at)
-    model = model(sum(in_chan), sum(out_chan),
+    model = model(style_size, sum(in_chan), sum(out_chan),
                   scale_factor=args.scale_factor, **args.misc_kwargs)
     model.to(device)
 
@@ -83,43 +87,40 @@ def test(args):
 
     with torch.no_grad():
         for i, data in enumerate(test_loader):
-            input, target = data['input'], data['target']
 
-            input = input.to(device, non_blocking=True)
-            target = target.to(device, non_blocking=True)
+            input = data['input'].to(device, non_blocking=True)
+            Om = data['Om'].float().to(device)
+            Dz = data['Dz'].float().to(device)
 
-            output = model(input)
-            if i < 5:
-                print('##### sample :', i)
+            model_eval = lambda tDz : model(input, Om, tDz)
+            jvp_dir = torch.tensor([1.]).to(device)
+            (out_dis, s), (out_vel, ds) = jvp(model_eval, (Dz,), (jvp_dir,))
+
+            if i <= 5 :
+                print('##### batch :', i)
+                print('style :', s)
+                print('style grad :', ds)
                 print('input shape :', input.shape)
-                print('output shape :', output.shape)
-                print('target shape :', target.shape)
+                print('out_dis shape :', out_dis.shape)
+                print('out_vel shape :', out_vel.shape)
+                print('write_chan :', write_chan)
 
-            input, output, target = narrow_cast(input, output, target)
-            if i < 5:
-                print('narrowed shape :', output.shape, flush=True)
-
-            loss = criterion(output, target)
-
-            print('sample {} loss: {}'.format(i, loss.item()))
-
-            #if args.in_norms is not None:
-            #    start = 0
-            #    for norm, stop in zip(test_dataset.in_norms, np.cumsum(in_chan)):
-            #        norm = import_attr(norm, norms, callback_at=args.callback_at)
-            #        norm(input[:, start:stop], undo=True, **args.misc_kwargs)
-            #        start = stop
             if args.tgt_norms is not None:
                 start = 0
-                for norm, stop in zip(test_dataset.tgt_norms, np.cumsum(out_chan)):
+                for norm, stop in zip([test_dataset.tgt_norms[0]], np.cumsum(out_chan)):
                     norm = import_attr(norm, norms, callback_at=args.callback_at)
-                    norm(output[:, start:stop], undo=True, **args.misc_kwargs)
-                    #norm(target[:, start:stop], undo=True, **args.misc_kwargs)
+                    norm(out_dis[:, start:stop], undo=True, **args.misc_kwargs)
+                    start = stop
+                start = 0
+                z = data['redshift']
+                Om = data['Om']
+                for norm, stop in zip([test_dataset.tgt_norms[1]], np.cumsum(out_chan)):
+                    norm = import_attr(norm, norms, callback_at=args.callback_at)
+                    x = torch.ones(1)
+                    norm(x, undo=True, Om=Om, z=z, **args.misc_kwargs)
+                    x = x.to(device)
+                    out_vel *= x
                     start = stop
 
-            #test_dataset.assemble('_in', in_chan, input,
-            #                      data['input_relpath'])
-            test_dataset.assemble('_out', out_chan, output,
-                                  data['target_relpath'])
-            #test_dataset.assemble('_tgt', out_chan, target,
-            #                      data['target_relpath'])
+            output = torch.cat((out_dis, out_vel), 1)
+            test_dataset.assemble('_out', write_chan, output, data['target_relpath'])
