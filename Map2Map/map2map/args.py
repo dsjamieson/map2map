@@ -21,9 +21,19 @@ def get_args():
         'test',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
+    generate_parser = subparsers.add_parser(
+        'generate',
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    run_parser = subparsers.add_parser(
+        'run',
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
 
     add_train_args(train_parser)
     add_test_args(test_parser)
+    add_generate_args(generate_parser)
+    add_run_args(run_parser)
 
     args = parser.parse_args()
 
@@ -31,6 +41,10 @@ def get_args():
         set_train_args(args)
     elif args.mode == 'test':
         set_test_args(args)
+    elif args.mode == 'generate':
+        set_generate_args(args)
+    elif args.mode == 'run':
+        set_run_args(args)
 
     return args
 
@@ -165,22 +179,44 @@ def add_train_args(parser):
 
 def add_test_args(parser):
     add_common_args(parser)
-
     parser.add_argument('--test-style-pattern', type=str, required=True,
             help='glob pattern for test data styles')
     parser.add_argument('--test-in-patterns', type=str_list, required=True,
             help='comma-sep. list of glob patterns for test input data')
     parser.add_argument('--test-tgt-patterns', type=str_list, required=True,
             help='comma-sep. list of glob patterns for test target data')
-
     parser.add_argument('--num-threads', type=int,
             help='number of CPU threads when cuda is unavailable. '
             'Default is the number of CPUs on the node by slurm')
 
+def add_generate_args(parser):
+    parser.add_argument('--num-mesh-1d', type=int, required=True, help='Number of particles output is num_mesh_1d**3')
+    parser.add_argument('--pk-pattern', type=str, required=True, help='glob pattern for styles')
+    parser.add_argument('--sphere-mode', type=bool, default=False, help='If true, modes are zeroed if their outside of the nyquist sphere')
+    parser.add_argument('--style-pattern', type=str, required=True, help='glob pattern for styles')
+    parser.add_argument('--out-pattern', type=str, required=True, help='glob pattern for output directories')
+    parser.add_argument('--no_dis', action="store_true", help='Flag to generate displacements')
+    parser.add_argument('--no_vel', action="store_true", help='Flag to generate velocities')
+    parser.add_argument('--verbose', action="store_true", help='Flag to print more output')
+    parser.add_argument('--crop', type=int_tuple, help='size to crop the input data. Default is the field size. Comma-sep. list of 1 or d integers')
+    parser.add_argument('--batch-size', '--batches', type=int, required=True, help='mini-batch size, per GPU')
+    parser.add_argument('--loader-workers', default=8, type=int, help='number of subprocesses per data loader. 0 to disable multiprocessing')
+    parser.add_argument('--num-threads', default=-1, type=int, help='CPU threads when cuda is unavailable. Default is the number of CPUs on SLURM node')
+
+def add_run_args(parser):
+    parser.add_argument('--style-pattern', type=str, required=True, help='glob pattern for styles')
+    parser.add_argument('--in-pattern', type=str, required=True, help='glob pattern for styles')
+    parser.add_argument('--out-pattern', type=str, required=True, help='glob pattern for output directories')
+    parser.add_argument('--no_dis', action="store_true", help='Flag to generate displacements')
+    parser.add_argument('--no_vel', action="store_true", help='Flag to generate velocities')
+    parser.add_argument('--verbose', action="store_true", help='Flag to print more output')
+    parser.add_argument('--crop', type=int_tuple, help='size to crop the input data. Default is the field size. Comma-sep. list of 1 or d integers')
+    parser.add_argument('--batch-size', '--batches', type=int, required=True, help='mini-batch size, per GPU')
+    parser.add_argument('--loader-workers', default=8, type=int, help='number of subprocesses per data loader. 0 to disable multiprocessing')
+    parser.add_argument('--num-threads', default=-1, type=int, help='CPU threads when cuda is unavailable. Default is the number of CPUs on SLURM node')
 
 def str_list(s):
     return s.split(',')
-
 
 def int_tuple(s):
     t = s.split(',')
@@ -190,10 +226,8 @@ def int_tuple(s):
     else:
         return t
 
-
 def set_common_args(args):
     pass
-
 
 def set_train_args(args):
     set_common_args(args)
@@ -201,6 +235,11 @@ def set_train_args(args):
     args.val = args.val_in_patterns is not None and \
             args.val_tgt_patterns is not None
 
-
 def set_test_args(args):
+    set_common_args(args)
+
+def set_generate_args(args):
+    set_common_args(args)
+
+def set_run_args(args):
     set_common_args(args)

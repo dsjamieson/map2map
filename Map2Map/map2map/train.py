@@ -43,8 +43,9 @@ def gpu_worker(local_rank, node, args):
 
     os.environ["TORCH_DISTRIBUTED_DEBUG"]="DETAIL"
     os.environ['CUDA_DEVICE_ORDER'] = 'PCI_BUS_ID'
-    os.environ['CUDA_VISIBLE_DEVICES'] = str(local_rank)
 
+    #change this?
+    os.environ['CUDA_VISIBLE_DEVICES'] = str(local_rank)
     device = torch.device('cuda', 0)
 
     rank = args.gpus_per_node * node + local_rank
